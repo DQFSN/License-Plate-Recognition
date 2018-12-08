@@ -1,0 +1,6 @@
+cmake*/
+.id*
+.DS*
+.git
+*.jpg
+*.png
