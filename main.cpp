@@ -7,44 +7,43 @@ using namespace cv;
 using namespace std;
 
 int main() {
-    Mat srcImg = imread("/Users/duanqifeng/CLionProjects/CarID/川A29922.jpg"),tgImg;
-    resize(srcImg,srcImg,Size(640,480));
-    Mat grayImg,blurImg,cannyImg,binimg;
-
     namedWindow("srcImg");
     namedWindow("tgImg");
     moveWindow("srcImg",0,0);
-    moveWindow("tgImg",500,0);
+    moveWindow("tgImg",0,500);
 
-    Mat element = getStructuringElement(MORPH_RECT,Size(3,3));
+    Mat srcImg = imread("/Users/duanqifeng/CLionProjects/CarID/鄂A59770.jpg"),tgImg;
+    resize(srcImg,srcImg,Size(640,480));
 
-    cvtColor(srcImg,grayImg,CV_BGR2GRAY);
-    blur(grayImg, blurImg, Size(3, 3));
-    threshold(blurImg,blurImg,90,255,THRESH_BINARY_INV);
-    imshow("bin",blurImg);
-    Canny(blurImg,cannyImg,3,9,3);
+    Mat hsvImg;
+    cvtColor(srcImg,hsvImg,CV_BGR2HSV);
 
-    dilate(cannyImg,cannyImg,element);
-    dilate(cannyImg,cannyImg,element);
-//    morphologyEx(cannyImg,cannyImg,MORPH_GRADIENT,element);
+    enum colorType {BLUE=0,YELLOW,WHITE};
+    const Scalar blueLow = Scalar(100,43,46);
+    const Scalar blueHi = Scalar(124,255,255);
+    const Scalar yellowLo = Scalar(26,43,46);
+    const Scalar yellowHi = Scalar(34,255,255);
+    const Scalar whiteLo = Scalar(0,0,211);
+    const Scalar whiteHi = Scalar(180,255,46);
+
+    vector<Scalar> hsvLo = {blueLow,yellowLo,whiteLo};
+    vector<Scalar> hsvHi = {blueHi,yellowHi,whiteHi};
+
+    inRange(hsvImg,hsvLo[0],hsvHi[0],hsvImg);
+    Mat binImg;
+    threshold(hsvImg,binImg,1,255,THRESH_BINARY);
+    Mat cannyImg;
+    Canny(binImg,cannyImg,3,9);
 
     vector<vector<Point2i>> contours;
-    findContours(cannyImg,contours,CV_RETR_LIST,CHAIN_APPROX_SIMPLE);
-    for (int i = 0; i < contours.size(); ++i) {
-        RotatedRect rect = minAreaRect(contours[i]);
+    findContours(binImg,contours,RETR_LIST,CHAIN_APPROX_NONE);
 
-        if ( rect.size.width > 60 && rect.size.height>10){
-            cout<<rect.size<<endl;
-            drawContours(srcImg,contours,i,Scalar(0,0,255));
-            imshow("srcImg",srcImg);
-            waitKey(0);
-        }
+    for (int index=0;index<contours.size();++index){
+        drawContours(srcImg,contours,index,Scalar(0,0,255));
     }
 
-
     imshow("srcImg",srcImg);
-    imshow("tgImg",cannyImg);
-
+    imshow("tgImg",binImg);
 
     waitKey(0);
     return 0;
