@@ -3,7 +3,7 @@ project(CarID)
 
 set(CMAKE_CXX_STANDARD 14)
 
-add_executable(CarID main.cpp)
+add_executable(CarID main.cpp imgprocess.h)
 
 find_package(OpenCV REQUIRED)
 target_link_libraries(CarID ${OpenCV_LIBS})
