@@ -9,22 +9,25 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <algorithm>
 
 using namespace cv;
 using namespace std;
 
-#define IDIMGROWS 35
-#define IDIMGCOLS 110
+#define IDIMGROWS 45//35
+#define IDIMGCOLS 140//110
 
-//#define DETAIL
+#define DETAIL
 #define PRINTDETAIL
 #define IDIMGDETAIL
 
 Mat findIdImg(Mat carImg);
 
-vector<Mat> getSingleChar(const Mat &idImg);
+vector<Mat> getSingleCharImg_touying(const Mat &idImg);
 
-string getID(vector<Mat>);
+bool myfunction(Rect r1,Rect r2){
+    return r1.tl().x<r2.tl().x;
+}
 
 Mat findIdImg(Mat carImg){
     resize(carImg,carImg,Size(640,480));
@@ -59,7 +62,9 @@ Mat findIdImg(Mat carImg){
     Mat erode_dilate = hsvImg;//膨胀和腐蚀
     Mat element = getStructuringElement(MORPH_RECT,Size(3,3));
     dilate(erode_dilate,erode_dilate,element);
-    dilate(erode_dilate,erode_dilate,element);
+    dilate(erode_dilate,erode_dilate,element);//meizu16 拍的照片膨胀5次，原本膨胀2次
+//    dilate(erode_dilate,erode_dilate,element);
+//    dilate(erode_dilate,erode_dilate,element);
 //    erode(erode_dilate,erode_dilate,element);
 //    dilate(erode_dilate,erode_dilate,element);
 
@@ -119,6 +124,12 @@ Mat findIdImg(Mat carImg){
             Rect rect_roi(center.x - rectW/2,center.y-rectH/2,rectW,rectH);
             idImg = src_copy_roi(rect_roi);//从旋转后的图像上截取车牌
 
+            cout<<idImg.size()<<endl;
+            resize(idImg,idImg,Size(140,45));
+            imshow("srcIdimg",idImg);
+            waitKey(0);
+
+
             return idImg;//返回车牌图片
 
 #ifdef DETAIL
@@ -132,7 +143,7 @@ Mat findIdImg(Mat carImg){
     exit(1);
 }
 
-vector<Mat> getSingleChar(const Mat &idImg){
+vector<Mat> getSingleCharImg_touying(const Mat &idImg){
     Mat src = idImg.clone();
     resize(src,src,Size(IDIMGCOLS,IDIMGROWS));
     Mat grayImg;
@@ -168,13 +179,13 @@ vector<Mat> getSingleChar(const Mat &idImg){
             firstRow = rowIndex;
         }
         //寻找最后一行
-        if (rowIndex > IDIMGROWS/2 && leapRowDot[rowIndex] > 20 && leapRowDot[rowIndex-1] >20 && leapRowDot[rowIndex-2] > 20){
+        if (rowIndex > IDIMGROWS/2 && rowIndex < IDIMGROWS*0.9 && leapRowDot[rowIndex] > 25 && leapRowDot[rowIndex-1] >25 && leapRowDot[rowIndex-2] > 25){
             lastRow = rowIndex;
         }
 
 
 #ifdef PRINTDETAIL
-        cout<<":"<<leapRowDot[rowIndex]<<endl;
+        cout<<":"<<leapRowDot[rowIndex]<<","<<lastRow<<endl;
 #endif
     }
 
@@ -214,17 +225,18 @@ vector<Mat> getSingleChar(const Mat &idImg){
 #endif
 
         int floor = 4;//判定为分割线的阈值
+        int ch_slip = 22;//汉字右边界范围
         //找到分割数字的列
         if (firstSplitCol){
-            if (i>16 && leapColDot[i]<floor){
+            if (i>ch_slip && leapColDot[i]<floor){
                 colSplitCols[preColNum] = i;
                 ++preColNum;
                 firstSplitCol = false;
             }
-        } else{
+        } else {
             int colStep = 12;//分割线彼此的距离
             if (preColNum == 2 ){
-                colStep = 5;
+                colStep = 8;
             }
             if (i-colSplitCols[preColNum-1] > colStep && leapColDot[i]<floor){
                 colSplitCols[preColNum] = i;
@@ -234,8 +246,8 @@ vector<Mat> getSingleChar(const Mat &idImg){
 
     }
 
-    if (preColNum < 8 && lastRow<=firstRow){
-        cerr<<"列切割失败"<<endl;
+    if (preColNum < 8 || lastRow<=firstRow){
+        cerr<<"\n列切割失败"<<endl;
         exit(-1);
     }
 
@@ -255,20 +267,21 @@ vector<Mat> getSingleChar(const Mat &idImg){
 #ifdef IDIMGDETAIL
 
     //画出列跳跃点分布
-    Mat plate_x = Mat(Size(110,35),CV_8UC3,Scalar(255,255,255));
+    Mat plate_x = Mat(Size(IDIMGCOLS,IDIMGROWS),CV_8UC3,Scalar(255,255,255));
     for (int i = 0; i < IDIMGCOLS; ++i) {
-        line(plate_x,Point2i(i,110),Point2i(i,35-leapColDot[i]),Scalar(0,0,255));
+        line(plate_x,Point2i(i,IDIMGCOLS),Point2i(i,IDIMGROWS-leapColDot[i]),Scalar(0,0,255));
     }
     //画出行跳跃点分布
-    Mat plate_y = Mat(Size(110,35),CV_8UC3,Scalar(255,255,255));
+    Mat plate_y = Mat(Size(IDIMGCOLS,IDIMGROWS),CV_8UC3,Scalar(255,255,255));
     for (int i = 0; i < IDIMGROWS; ++i) {
         line(plate_y,Point2i(0,i),Point2i(leapRowDot[i],i),Scalar(0,0,255));
     }
 
 
 
+    //列分割线
     for (auto tmp : colSplitCols){
-        line(plate_x,Point2i(tmp,35),Point2i(tmp,0),Scalar(0,0,255));
+        line(plate_x,Point2i(tmp,IDIMGROWS),Point2i(tmp,0),Scalar(0,0,255));
 
 #ifdef PRINTDETAIL
         cout<<"colSplits: "<<tmp<<" ";
@@ -289,29 +302,148 @@ vector<Mat> getSingleChar(const Mat &idImg){
 
     Rect rect(0,firstRow,IDIMGCOLS,lastRow-firstRow+1);
     Mat new_binImg = binImg(rect);
+    Mat new_Img = idImg(rect);
     cout<<"new_binimg.size: "<<new_binImg.size<<endl;
 
+    imshow("new_img",new_Img);
+    waitKey(0);
+
+
+
     vector<Mat> singleCharImg = {new_binImg};
-    int begin = 0;
-    for (int colSplitCol : colSplitCols) {
-        int width = colSplitCol - begin + 1;
+    int begin = 4;
+    for (int index=0;index<8;++index){
+        int width = colSplitCols[index]-begin;
+        if (index>2){
+            width += 2;
+        }
         int height = lastRow-firstRow+1;
-        Rect rect_single(begin+2,0,width-2,height);//+2,因为切片出来的效果感觉偏左，所以右移了一点
+        Rect rect_single(begin,0,width,height);//+2,因为切片出来的效果感觉偏左，所以右移了一点
         singleCharImg.push_back(new_binImg(rect_single));
-        begin = colSplitCol;
+        begin = colSplitCols[index];
+        if (index>2){
+            begin += 2;
+        }
     }
 
 #ifdef IDIMGDETAIL
     int NUM = 0;
     for (auto const &tmp : singleCharImg){
         string windowName = to_string(NUM) +"th";
-        imshow(windowName,tmp);
-        waitKey(0);
+        Mat im = tmp.clone();
+        resize(im,im,Size(18,27));
+        imshow(windowName,im);
+//        threshold(im,im,1,255,THRESH_BINARY);
+        imwrite(windowName+".jpg",im);
         ++NUM;
     }
+    waitKey(0);
 #endif
     return singleCharImg;
 }
+
+
+
+vector<Mat> getSigleImg(Mat idImg){
+    vector<Mat> result;
+
+    Mat src = idImg.clone();
+    resize(src,src,Size(IDIMGCOLS,IDIMGROWS));
+    Mat grayImg;
+    cvtColor(src,grayImg,COLOR_BGR2GRAY);
+    Mat cannyImg;
+    Canny(grayImg,cannyImg,90,120);
+    Mat binImg;
+    threshold(cannyImg,binImg,130,255,THRESH_OTSU);
+
+    int firstRow = 0,lastRow = 0;
+
+    //水平扫描
+    int leapRowDot[IDIMGROWS] = {0};//每行跳跃点个数
+    for (int rowIndex=0; rowIndex < binImg.rows-1; ++rowIndex) {
+        for (int colIndex = 0; colIndex < binImg.cols-1; ++colIndex) {
+            //行跳跃点
+            Point2i point_l(colIndex,rowIndex);
+            Point2i point_r(colIndex+1,rowIndex);
+            bool value_l = binImg.at<uchar>(point_l);
+            bool value_r = binImg.at<uchar>(point_r);
+            if ( value_l != value_r)
+                ++leapRowDot[rowIndex];
+
+#ifdef PRINTDETAIL
+            cout<<binImg.at<uchar>(point_l);
+#endif
+
+        }
+
+        //寻找第一行
+        if ( rowIndex > 2 && rowIndex < IDIMGROWS/2 && leapRowDot[rowIndex] < 30){
+            firstRow = rowIndex;
+        }
+        //寻找最后一行
+        if (rowIndex > IDIMGROWS/2 && rowIndex < IDIMGROWS*0.9 && leapRowDot[rowIndex] > 25 && leapRowDot[rowIndex-1] >25 && leapRowDot[rowIndex-2] > 25){
+            lastRow = rowIndex;
+        }
+
+
+#ifdef PRINTDETAIL
+        cout<<":"<<leapRowDot[rowIndex]<<","<<lastRow<<endl;
+#endif
+    }
+
+#ifdef PRINTDETAIL
+    cout<<"\n\n\n"<<endl;
+#endif
+
+    Rect rect(0,firstRow,IDIMGCOLS-5,lastRow-firstRow+1);
+
+    //去掉方框
+    Mat new_Img = idImg(rect).clone();
+
+    //将汉字联通
+    for (int k = 0; k < new_Img.rows; ++k) {
+        line(new_Img,Point(6,k),Point(20,k),Scalar(200,200,200));
+        imshow("line",new_Img);
+        waitKey(0);
+    }
+
+    Mat tmp = idImg(rect).clone();//
+
+    cvtColor(new_Img,new_Img,CV_RGB2GRAY);
+    blur(new_Img,new_Img,Size(3,3));
+    threshold(new_Img,new_Img,100,255,THRESH_OTSU);
+
+    vector<vector<Point>> contours;
+    findContours(new_Img,contours,RETR_EXTERNAL,CHAIN_APPROX_SIMPLE);
+
+    vector<Rect> chars;//每个字符的包围矩形
+    for (int i = 0; i < contours.size(); ++i) {
+        Rect rect = boundingRect(contours[i]);
+        chars.push_back(rect);
+    }
+
+    //按照x排序
+    std::sort (chars.begin(), chars.end(), myfunction);
+
+    for (int j = 0; j < chars.size(); ++j) {
+        if (chars[j].width>10 || (chars[j].height>new_Img.rows-3 && chars[j].tl().x > IDIMGCOLS*0.2) ){
+//            rectangle(tmp,chars[j],Scalar(0,0,255));
+            Mat s = tmp(chars[j]).clone();
+            resize(s,s,Size(18,27));
+            result.push_back(s);
+            imshow("s",s);
+            waitKey(0);
+        }
+    }
+
+
+    imshow("new_img",new_Img);
+    imshow("img",tmp);
+    waitKey(0);
+
+    return result;
+}
+
 
 
 #endif //CARID_IMGPROCESS_H
